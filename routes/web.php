@@ -40,6 +40,7 @@ USE prov_estado_excel;
 
 CREATE TABLE cargado_proveedores(
 	idCargadoProveedores INT PRIMARY KEY AUTO_INCREMENT,
+	archivo VARCHAR(100),
 	token VARCHAR(100),
 	ip VARCHAR(100),
 	fechaImportacion DATETIME,
@@ -61,7 +62,7 @@ CREATE TABLE proveedor(
 	respuesta INT,
 	razon VARCHAR(200),
 	tipoEmpresa VARCHAR(50),
-	estado VARCHAR(20),
+	estado VARCHAR(40),
 	condicion VARCHAR(20),
 	departamento VARCHAR(100),
 	provincia VARCHAR(100),
@@ -211,7 +212,8 @@ CREATE TABLE log_aplicacion(
 
 
 
-------------------
+-- ------------------------
+
 -- SUPERCONSULTA DE TIEMPOS
 
 SELECT 
