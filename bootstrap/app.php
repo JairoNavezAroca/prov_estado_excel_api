@@ -38,6 +38,10 @@ $app->withEloquent();
 |
 */
 
+$app->bind(Illuminate\Session\SessionServiceProvider::class, function ($app) {    
+    return $app->make('session');
+});
+
 $app->singleton(
     Illuminate\Contracts\Debug\ExceptionHandler::class,
     App\Exceptions\Handler::class
@@ -60,6 +64,7 @@ $app->singleton(
 */
 
 $app->configure('app');
+$app->configure('session');
 
 /*
 |--------------------------------------------------------------------------
@@ -81,7 +86,15 @@ $app->configure('app');
 // ]);
 
 $app->middleware([
+    'Illuminate\Session\Middleware\StartSession'
+]);
+
+$app->middleware([
 	App\Http\Middleware\LumenCors::class
+]);
+
+$app->routeMiddleware([
+	'jwt.verify' => \App\Http\Middleware\JWTMiddleware::class,
 ]);
 
 /*
@@ -99,6 +112,7 @@ $app->middleware([
 // $app->register(App\Providers\AuthServiceProvider::class);
 // $app->register(App\Providers\EventServiceProvider::class);
 
+$app->register(Illuminate\Session\SessionServiceProvider::class);
 $app->register(Maatwebsite\Excel\ExcelServiceProvider::class);
 $app->alias('Excel', Maatwebsite\Excel\Facades\Excel::class);
 $app->configure('excel');

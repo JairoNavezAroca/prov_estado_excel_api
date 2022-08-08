@@ -14,14 +14,26 @@
 */
 
 $router->get('/', function () use ($router) {
-    //return $router->app->version();
+	//return $router->app->version();
 });
+
+
+$router->post('/login', 'LoginController@login');
 
 $router->post('/importar-excel', 'ProcesamientoController@importarExcel');
 $router->delete('/importar-excel', 'ProcesamientoController@importarExcel');
-$router->get('/obtener-cargado/{token}', 'ProcesamientoController@obtenerCargado');
-$router->post('/procesar-ruc', 'ProcesamientoController@procesarRuc');
+
+$router->group(['middleware' => ['jwt.verify']], function () use ($router) {
+	$router->patch('/cambiar-contrasena', 'LoginController@cambiarContrasena');
+
+	$router->get('/obtener-cargado/{token}', 'ProcesamientoController@obtenerCargado');
+	$router->post('/procesar-ruc', 'ProcesamientoController@procesarRuc');
+});
 $router->get('/exportar-excel/{token}', 'ProcesamientoController@exportarExcel');
+
+/*$router->get('/key', function() {
+    return \Illuminate\Support\Str::random(32);
+});*/
 
 // https://github.com/laracademy/generators
 //php artisan generate:modelfromtable --overwrite=true --timestamps=false --table=cargado_proveedores,proveedor,proveedor_telefono,proveedor_email,proveedor_antecedente,proveedor_socio,proveedor_representante,proveedor_organo_administrativo,log_trazado_api_proveedores,log_proveedores,log_aplicacion
@@ -32,11 +44,9 @@ $router->get('/exportar-excel/{token}', 'ProcesamientoController@exportarExcel')
 
 /*
 
--- DROP DATABASE prov_estado_excel
+-- DROP DATABASE prov_estado_excel;
 -- CREATE DATABASE prov_estado_excel;
 USE prov_estado_excel;
-
-
 
 CREATE TABLE cargado_proveedores(
 	idCargadoProveedores INT PRIMARY KEY AUTO_INCREMENT,
@@ -174,7 +184,7 @@ CREATE TABLE proveedor_organo_administrativo(
 	FOREIGN KEY (idProveedor) REFERENCES proveedor(idProveedor)
 );
 
---------------------------
+-- ------------------------
 CREATE TABLE log_trazado_api_proveedores(
 	idTrazadoApiProveedores INT PRIMARY KEY AUTO_INCREMENT,
 	idProveedor INT,
@@ -207,8 +217,30 @@ CREATE TABLE log_aplicacion(
 	fechahora DATETIME
 );
 
+-- CAMBIOS AGOSTO 2022
+CREATE TABLE estado_usuario(
+	idEstadoUsuario INT PRIMARY KEY,
+	descripcion VARCHAR(100)
+);
 
+CREATE TABLE usuario(
+	idUsuario INT PRIMARY KEY AUTO_INCREMENT,
+	nombres VARCHAR(100),
+	apellidoPaterno VARCHAR(100),
+	apellidoMaterno VARCHAR(100),
+	usuario VARCHAR(100),
+	contrasena VARCHAR(500),
+	contrasenaInicial VARCHAR(100),
+	flagObligarCambiarContrasena BOOL,
+	idEstadoUsuario INT NOT NULL,
+	FOREIGN KEY (idEstadoUsuario) REFERENCES estado_usuario(idEstadoUsuario)
+);
 
+INSERT INTO estado_usuario VALUES (1, 'ACTIVADO');
+INSERT INTO estado_usuario VALUES (2, 'DESACTIVADO');
+
+INSERT INTO usuario(nombres, apellidoPaterno, apellidoMaterno, usuario, contrasena, contrasenaInicial, flagObligarCambiarContrasena, idEstadoUsuario)
+	VALUES ('jairo', 'navez', 'aroca', 'jnavez', '', '123456', TRUE, 1);
 
 
 
