@@ -41,24 +41,24 @@ class ProcesamientoController extends Controller
 			return;
 		$_FILES = current($_FILES);
 		//$_FILES['tmp_name']
-		
+
 		$nombreArchivo = $_FILES['name'];
 		$extension = explode(".", $nombreArchivo);
 		$extension = $extension[count($extension) - 1];
 		$nombreArchivoFinal =
-			date("y"). //años
-			date("m"). //mes
-			date("d"). //dia
-			date("H"). //hora 24h
-			date("i"). //minutos
-			date("s"). //segundos
-			date("_").
-			substr(microtime(),2,4).
-			'.'.$extension;
-		$rutaArchivoSubido = static::$rutaExcel.$nombreArchivoFinal;
+			date("y") . //años
+			date("m") . //mes
+			date("d") . //dia
+			date("H") . //hora 24h
+			date("i") . //minutos
+			date("s") . //segundos
+			date("_") .
+			substr(microtime(), 2, 4) .
+			'.' . $extension;
+		$rutaArchivoSubido = static::$rutaExcel . $nombreArchivoFinal;
 		move_uploaded_file($_FILES['tmp_name'], $rutaArchivoSubido);
 		//return $nombreArchivoFinal;
-		
+
 
 		//$ruta = ;
 		//dd($_FILES);
@@ -81,14 +81,16 @@ class ProcesamientoController extends Controller
 			$_cargadoProveedores->save();
 
 			foreach ($lista_ruc as $ruc) {
-				$_proveedor = new Proveedor();
-				$_proveedor->idCargadoProveedores = $_cargadoProveedores->idCargadoProveedores;
-				$_proveedor->token = Uuid::generate(4)->string;
-				$_proveedor->fechaRegistroRuc = Carbon::now()->toString();
-				$_proveedor->ruc = $ruc;
-				$_proveedor->estadoRegistroDatos = Constantes::$PENDIENTE;
-				$_proveedor->numeroIntentos = 0;
-				$_proveedor->save();
+				if ($ruc != '' && $ruc != null) {
+					$_proveedor = new Proveedor();
+					$_proveedor->idCargadoProveedores = $_cargadoProveedores->idCargadoProveedores;
+					$_proveedor->token = Uuid::generate(4)->string;
+					$_proveedor->fechaRegistroRuc = Carbon::now()->toString();
+					$_proveedor->ruc = $ruc;
+					$_proveedor->estadoRegistroDatos = Constantes::$PENDIENTE;
+					$_proveedor->numeroIntentos = 0;
+					$_proveedor->save();
+				}
 			}
 			unset($lista_ruc);
 
@@ -144,25 +146,24 @@ class ProcesamientoController extends Controller
 			$_proveedor = Proveedor::where('token', $token)->first();
 			$_proveedor->numeroIntentos = $_proveedor->numeroIntentos + 1;
 
-			if ($_proveedor->estadoRegistroDatos != Constantes::$PROCESANDO){
-			
-				if ($_proveedor->numeroIntentos >= static::$MAXIMO_INTENTOS && $flagFallidos == false){
+			if ($_proveedor->estadoRegistroDatos != Constantes::$PROCESANDO) {
+
+				if ($_proveedor->numeroIntentos >= static::$MAXIMO_INTENTOS && $flagFallidos == false) {
 					$_proveedor->estadoRegistroDatos = Constantes::$FALLIDO;
 					$_proveedor->save();
-				}
-				else{
+				} else {
 					$_proveedor->estadoRegistroDatos = Constantes::$PROCESANDO;
 					$_proveedor->save();
-					
+
 					$___consulta_token_ruc = microtime(true);
 					$ruc = $_proveedor->ruc;
-					
+
 					if (true) {
 						$response1 = $this->http->get("https://eap.osce.gob.pe/ficha-proveedor-cns/1.0/ficha/$ruc/resumen");
 						$___peticion_api_1 = microtime(true);
 						$response2 = $this->http->get("https://eap.osce.gob.pe/perfilprov-bus/1.0/ficha/$ruc");
 						$___peticion_api_2 = microtime(true);
-						
+
 						LogProveedores::create([
 							'idProveedor' => $_proveedor->idProveedor,
 							'ruc' => $_proveedor->ruc,
@@ -192,7 +193,7 @@ class ProcesamientoController extends Controller
 					//dd(array_keys(get_defined_vars()));
 					//dd($response1,$response2);
 					$data = true;
-				
+
 					$___FIN = microtime(true);
 
 					LogTrazadoApiProveedores::create([
@@ -220,16 +221,15 @@ class ProcesamientoController extends Controller
 				'success' => false,
 				'mensaje' => $mensaje
 			];
-		}
-		finally{
-			if (isset($e)){
+		} finally {
+			if (isset($e)) {
 				DB::rollback();
 				$_proveedor = Proveedor::where('token', $token)->first();
 				$_proveedor->estadoRegistroDatos = Constantes::$FALLIDO;
 				$_proveedor->save();
 
 				LogAplicacion::create([
-					'detalle'=> $_proveedor->idProveedor . ' - ' . $token . ' - ' . $e->getMessage(),
+					'detalle' => $_proveedor->idProveedor . ' - ' . $token . ' - ' . $e->getMessage(),
 					//'detalle'=> $_proveedor->idProveedor . ' - ' . $token . ' - ' . $e->__toString(),
 					'fechahora' => Carbon::now()->toString()
 				]);
@@ -362,7 +362,8 @@ class ProcesamientoController extends Controller
 		unset($lista_organosAdm);
 	}
 
-	public function exportarExcel(String $token){
+	public function exportarExcel(String $token)
+	{
 		error_log($this->obtenerMemoria());
 		try {
 			$_cargadoProveedores = CargadoProveedores::where('token', $token)->first();
@@ -378,7 +379,7 @@ class ProcesamientoController extends Controller
 			//dd($e);
 			$mensaje = 'Ha ocurrido un error, intentelo nuevamente';
 			LogAplicacion::create([
-				'detalle'=> $e->__toString(),
+				'detalle' => $e->__toString(),
 				'fechahora' => Carbon::now()->toString()
 			]);
 		}
