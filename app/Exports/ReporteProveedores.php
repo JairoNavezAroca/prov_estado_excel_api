@@ -21,6 +21,7 @@ class ReporteProveedores implements WithMultipleSheets
 	{
 		$res = Reporte::obtenerDatosReporte($this->idCargadoProveedores);
 		$sheets = [];
+		array_push($sheets, new ProveedoresResumen($res->proveedor_resumen));
 		array_push($sheets, new ProveedoresMaestro($res->proveedor));
 		array_push($sheets, new ProveedoresDetalleSocios($res->proveedor_socio));
 		array_push($sheets, new ProveedoresDetalleRepresentantes($res->proveedor_representante));
