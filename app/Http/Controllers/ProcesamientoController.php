@@ -159,21 +159,21 @@ class ProcesamientoController extends Controller
 					$ruc = $_proveedor->ruc;
 
 					if (true) {
-						$response1 = $this->http->get("https://eap.osce.gob.pe/ficha-proveedor-cns/1.0/ficha/$ruc/resumen");
+						$response1 = $this->obtenerResultadoApi1($ruc);
 						$___peticion_api_1 = microtime(true);
-						$response2 = $this->http->get("https://eap.osce.gob.pe/perfilprov-bus/1.0/ficha/$ruc");
+						$response2 = $this->obtenerResultadoApi2($ruc);
 						$___peticion_api_2 = microtime(true);
 
 						LogProveedores::create([
 							'idProveedor' => $_proveedor->idProveedor,
 							'ruc' => $_proveedor->ruc,
-							'api_1' => $response1->body(),
-							'api_2' => $response2->body(),
+							'api_1' => $response1,
+							'api_2' => $response2,
 							'fecha_registro' => Carbon::now()->toString()
 						]);
 
-						$response1 = $response1->object();
-						$response2 = $response2->object();
+						$response1 = json_decode($response1);
+						$response2 = json_decode($response2);
 						$___conversion = microtime(true);
 					} else {
 						$___peticion_api_1 = microtime(true);
@@ -239,6 +239,78 @@ class ProcesamientoController extends Controller
 		return Respuesta::enviar($data ?? null, $mensaje ?? null, $success ?? true);
 	}
 
+	private function obtenerResultadoApi1($ruc)
+	{
+		try {
+			return $this->http->get("https://eap.osce.gob.pe/ficha-proveedor-cns/1.0/ficha/$ruc/resumen")->body();
+		} catch (\Exception $e) {
+			LogAplicacion::create([
+				'detalle' => $e->getMessage(),
+				'fechahora' => Carbon::now()->toString()
+			]);
+			return json_encode(
+				[
+					'conformacion' => [
+						'proveedor' => [
+							'codigoRegistro' => null
+						],
+						'socios' => [],
+						'representantes' => [],
+						'organosAdm' => [],
+					],
+					'datosSunat' => [
+						'respuesta' => null,
+						'razon' => null,
+						'tipoEmpresa' => null,
+						'estado' => null,
+						'condicion' => null,
+						'departamento' => null,
+						'provincia' => null,
+						'distrito' => null,
+						'personeria' => null,
+						'process' => null,
+					],
+					'antecedentes' => [
+						'sanciones' => null,
+						'inhsJudicial' => null,
+						'inhsAdministrativa' => null,
+						'fechaConsultaSancTCE' => '01/01/2000 00:00:00',
+						'fechaConsultaInhabAD' => '01/01/2000 00:00:00',
+						'fechaConsultaInhabMJ' => '01/01/2000 00:00:00',
+						'process' => null,
+					],
+				]
+			);
+		}
+	}
+
+	private function obtenerResultadoApi2($ruc)
+	{
+		try {
+			return $this->http->get("https://eap.osce.gob.pe/perfilprov-bus/1.0/ficha/$ruc")->body();
+		} catch (\Exception $e) {
+			LogAplicacion::create([
+				'detalle' => $e->getMessage(),
+				'fechahora' => Carbon::now()->toString()
+			]);
+			return json_encode(
+				[
+					'proveedorT01' => [
+						'codProv' => null,
+						'idOrigenProv' => null,
+						'numRuc' => null,
+						'nomRzsProv' => null,
+						'esHabilitado' => null,
+						'lscIdTipReg' => null,
+						'lscIdTipRegVig' => null,
+						'esAptoContratar' => null,
+						'cmcTexto' => null,
+					]
+				]
+			);
+		}
+	}
+
 	private function RegistrarRepuestaApiATablas($_proveedor, $response1, $response2)
 	{
 		$_proveedor->ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
@@ -247,7 +319,10 @@ class ProcesamientoController extends Controller
 
 		$_proveedor->codigoRegistro = $response1->conformacion->proveedor->codigoRegistro;
 		$_proveedor->respuesta = $response1->datosSunat->respuesta;
-		$_proveedor->razon = $response1->datosSunat->razon;
+		if ($response1->datosSunat->razon != null && trim($response1->datosSunat->razon) != '')
+			$_proveedor->razon = $response1->datosSunat->razon;
+		else
+			$_proveedor->razon = $response2->proveedorT01?->nomRzsProv;
 		$_proveedor->tipoEmpresa = $response1->datosSunat->tipoEmpresa;
 		$_proveedor->estado = $response1->datosSunat->estado;
 		$_proveedor->condicion = $response1->datosSunat->condicion;
