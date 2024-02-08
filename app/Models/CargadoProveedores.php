@@ -33,7 +33,7 @@ class CargadoProveedores extends Model
      * @var array
      */
     protected $fillable = [
-        'ip', 'token', 'fechaImportacion', 'fechaExportacion'
+        'ip', 'token', 'fechaImportacion', 'fechaExportacion', 'flagBusquedaCompleta'
     ];
 
     /**
@@ -51,7 +51,12 @@ class CargadoProveedores extends Model
      * @var array
      */
     protected $casts = [
-        'idCargadoProveedores' => 'int', 'ip' => 'string', 'token' => 'string', 'fechaImportacion' => 'datetime', 'fechaExportacion' => 'datetime'
+        'idCargadoProveedores' => 'int',
+        'ip' => 'string',
+        'token' => 'string',
+        'fechaImportacion' => 'datetime',
+        'fechaExportacion' => 'datetime',
+        'flagBusquedaCompleta' => 'boolean'
     ];
 
     /**

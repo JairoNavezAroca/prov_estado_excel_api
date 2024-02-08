@@ -20,9 +20,13 @@ use App\Models\LogAplicacion;
 use App\Models\LogProveedores;
 use Carbon\Carbon;
 use App\Clases\Constantes;
+use App\Clases\ConstantesUsuario;
 use Illuminate\Support\Facades\DB;
 use App\Exports\ReporteProveedores;
 use App\Clases\Funciones;
+use App\Models\Usuario;
+use Exception;
+use Illuminate\Support\Facades\Session;
 
 class ProcesamientoController extends Controller
 {
@@ -108,6 +112,33 @@ class ProcesamientoController extends Controller
 		return Respuesta::enviar($data ?? null, $mensaje ?? null);
 	}
 
+	public function actualizarCargadoProveedores(Request $request)
+	{
+		try {
+			$token = $request->token;
+			$flagBusquedaCompleta = $request->flagBusquedaCompleta == "true";
+			if ($flagBusquedaCompleta){
+				$usuarioJWT = Session::get(ConstantesUsuario::KeySessionJWT);
+				$usuario = Usuario::find($usuarioJWT->idUsuario);
+				if ($usuario->flagPuedeHacerBusquedaCompleta == false){
+					LogAplicacion::create([
+						'detalle' => "Se cargó archivo con flag busqueda completa, sin embargo usuario no tiene dicho privilegio",
+						'fechahora' => Carbon::now()->toString()
+					]);
+					$flagBusquedaCompleta = false;
+				}
+			}
+			CargadoProveedores::where('token', $token)->update(['flagBusquedaCompleta' => $flagBusquedaCompleta]);
+		} catch (\Exception $e) {
+			$mensaje = 'Ha ocurrido un error, intentelo nuevamente';
+			LogAplicacion::create([
+				'detalle' => $e->getMessage(),
+				'fechahora' => Carbon::now()->toString()
+			]);
+		}
+		return Respuesta::enviar($data ?? null, $mensaje ?? null);
+	}
+
 	public function obtenerCargado(String $token)
 	{
 		error_log($this->obtenerMemoria());
@@ -142,9 +173,11 @@ class ProcesamientoController extends Controller
 		$token = $request->get('token');
 		$flagFallidos = $request->get('flagFallidos', false);
 		try {
+			$mensaje = null;
 			$___INICIO = microtime(true);
 			$_proveedor = Proveedor::where('token', $token)->first();
 			$_proveedor->numeroIntentos = $_proveedor->numeroIntentos + 1;
+			$flagBusquedaCompleta = $_proveedor->cargadoProveedores->flagBusquedaCompleta;
 
 			if ($_proveedor->estadoRegistroDatos != Constantes::$PROCESANDO) {
 
@@ -159,22 +192,32 @@ class ProcesamientoController extends Controller
 					$ruc = $_proveedor->ruc;
 
 					if (true) {
-						$response1 = $this->obtenerResultadoApi1($ruc);
+						[$response1, $mensaje1] = $this->obtenerResultadoApi1($ruc, $flagBusquedaCompleta);
 						$___peticion_api_1 = microtime(true);
-						$response2 = $this->obtenerResultadoApi2($ruc);
+						[$response2, $mensaje2] = $this->obtenerResultadoApi2($ruc); // este api tiene los datos principales
 						$___peticion_api_2 = microtime(true);
 
-						LogProveedores::create([
-							'idProveedor' => $_proveedor->idProveedor,
-							'ruc' => $_proveedor->ruc,
-							'api_1' => $response1,
-							'api_2' => $response2,
-							'fecha_registro' => Carbon::now()->toString()
-						]);
+						// LogProveedores::create([
+						// 	'idProveedor' => $_proveedor->idProveedor,
+						// 	'ruc' => $_proveedor->ruc,
+						// 	'api_1' => $response1,
+						// 	'api_2' => $response2,
+						// 	'fecha_registro' => Carbon::now()->toString()
+						// ]);
 
 						$response1 = json_decode($response1);
 						$response2 = json_decode($response2);
 						$___conversion = microtime(true);
+
+						if (
+								($mensaje1 != null && $mensaje1 != '' && $mensaje2 != null && $mensaje2 != '')
+								|| ($flagBusquedaCompleta == false && $mensaje2 != null && $mensaje2 != '')
+							)
+							throw new Exception("Servicio caído");
+						else if ($mensaje1 != null && $mensaje1 != '')
+							$data = ['warning' => true, 'mensaje' => $mensaje1];
+						else if ($mensaje2 != null && $mensaje2 != '')
+							$data = ['warning' => true, 'mensaje' => $mensaje2];
 					} else {
 						$___peticion_api_1 = microtime(true);
 						$___peticion_api_2 = microtime(true);
@@ -192,7 +235,7 @@ class ProcesamientoController extends Controller
 					//dd(get_defined_vars());
 					//dd(array_keys(get_defined_vars()));
 					//dd($response1,$response2);
-					$data = true;
+					//$data = true;
 
 					$___FIN = microtime(true);
 
@@ -216,7 +259,7 @@ class ProcesamientoController extends Controller
 			];
 		} catch (\Exception $e) {
 			$success = true;
-			$mensaje = 'Error inesperado.';
+			$mensaje = 'El servidor está caído, por favor intentar mas tarde';
 			$data = [
 				'success' => false,
 				'mensaje' => $mensaje
@@ -239,80 +282,90 @@ class ProcesamientoController extends Controller
 		return Respuesta::enviar($data ?? null, $mensaje ?? null, $success ?? true);
 	}
 
-	private function obtenerResultadoApi1($ruc)
+	private function obtenerResultadoApi1($ruc, $flagBusquedaCompleta)
 	{
+		$datosPorDefecto = json_encode(
+			[
+				'conformacion' => [
+					'proveedor' => [
+						'codigoRegistro' => null
+					],
+					'socios' => [],
+					'representantes' => [],
+					'organosAdm' => [],
+				],
+				'datosSunat' => [
+					'respuesta' => null,
+					'razon' => null,
+					'tipoEmpresa' => null,
+					'estado' => null,
+					'condicion' => null,
+					'departamento' => null,
+					'provincia' => null,
+					'distrito' => null,
+					'personeria' => null,
+					'process' => null,
+				],
+				'antecedentes' => [
+					'sanciones' => null,
+					'inhsJudicial' => null,
+					'inhsAdministrativa' => null,
+					'fechaConsultaSancTCE' => '01/01/2000 00:00:00',
+					'fechaConsultaInhabAD' => '01/01/2000 00:00:00',
+					'fechaConsultaInhabMJ' => '01/01/2000 00:00:00',
+					'process' => null,
+				],
+			]
+		);
 		try {
-			return $this->http->get("https://eap.osce.gob.pe/ficha-proveedor-cns/1.0/ficha/$ruc/resumen")->body();
+			if($flagBusquedaCompleta){
+				$datos = $this->http->get("https://eap.osce.gob.pe/ficha-proveedor-cns/1.0/ficha/$ruc/resumen")->body();
+				return [$datos, ''];
+			}
+			else
+				return [$datosPorDefecto, ''];
 		} catch (\Exception $e) {
 			LogAplicacion::create([
 				'detalle' => $e->getMessage(),
 				'fechahora' => Carbon::now()->toString()
 			]);
-			return json_encode(
-				[
-					'conformacion' => [
-						'proveedor' => [
-							'codigoRegistro' => null
-						],
-						'socios' => [],
-						'representantes' => [],
-						'organosAdm' => [],
-					],
-					'datosSunat' => [
-						'respuesta' => null,
-						'razon' => null,
-						'tipoEmpresa' => null,
-						'estado' => null,
-						'condicion' => null,
-						'departamento' => null,
-						'provincia' => null,
-						'distrito' => null,
-						'personeria' => null,
-						'process' => null,
-					],
-					'antecedentes' => [
-						'sanciones' => null,
-						'inhsJudicial' => null,
-						'inhsAdministrativa' => null,
-						'fechaConsultaSancTCE' => '01/01/2000 00:00:00',
-						'fechaConsultaInhabAD' => '01/01/2000 00:00:00',
-						'fechaConsultaInhabMJ' => '01/01/2000 00:00:00',
-						'process' => null,
-					],
-				]
-			);
+			return [$datosPorDefecto, 'El portal osce tiene inconvenientes, se intentará importar la data de forma básica'];
 		}
 	}
 
 	private function obtenerResultadoApi2($ruc)
 	{
+		$datosPorDefecto = json_encode(
+			[
+				'proveedorT01' => [
+					'codProv' => null,
+					'idOrigenProv' => null,
+					'numRuc' => null,
+					'nomRzsProv' => null,
+					'esHabilitado' => null,
+					'lscIdTipReg' => null,
+					'lscIdTipRegVig' => null,
+					'esAptoContratar' => null,
+					'cmcTexto' => null,
+				]
+			]
+		);
 		try {
-			return $this->http->get("https://eap.osce.gob.pe/perfilprov-bus/1.0/ficha/$ruc")->body();
+			$datos = $this->http->get("https://eap.osce.gob.pe/perfilprov-bus/1.0/ficha/$ruc")->body();
+			return [$datos, ''];
 		} catch (\Exception $e) {
 			LogAplicacion::create([
 				'detalle' => $e->getMessage(),
 				'fechahora' => Carbon::now()->toString()
 			]);
-			return json_encode(
-				[
-					'proveedorT01' => [
-						'codProv' => null,
-						'idOrigenProv' => null,
-						'numRuc' => null,
-						'nomRzsProv' => null,
-						'esHabilitado' => null,
-						'lscIdTipReg' => null,
-						'lscIdTipRegVig' => null,
-						'esAptoContratar' => null,
-						'cmcTexto' => null,
-					]
-				]
-			);
+			return [$datosPorDefecto, 'El portal osce tiene inconvenientes, se intentará importar la data de forma básica'];
 		}
 	}
 
 	private function RegistrarRepuestaApiATablas($_proveedor, $response1, $response2)
 	{
+		$flagBusquedaCompleta = $_proveedor->cargadoProveedores->flagBusquedaCompleta;
+
 		$_proveedor->ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
 		$_proveedor->fechaRegistroDatos = Carbon::now()->toString();
 		$_proveedor->estadoRegistroDatos = Constantes::$REGISTRADO;
@@ -326,17 +379,17 @@ class ProcesamientoController extends Controller
 		$_proveedor->tipoEmpresa = $response1->datosSunat->tipoEmpresa;
 		$_proveedor->estado = $response1->datosSunat->estado;
 		$_proveedor->condicion = $response1->datosSunat->condicion;
-		$_proveedor->departamento = $response1->datosSunat->departamento;
-		$_proveedor->provincia = $response1->datosSunat->provincia;
-		$_proveedor->distrito = $response1->datosSunat->distrito;
+		$_proveedor->departamento = ($flagBusquedaCompleta) ? $response1->datosSunat->departamento : '';
+		$_proveedor->provincia = ($flagBusquedaCompleta) ? $response1->datosSunat->provincia : '';
+		$_proveedor->distrito = ($flagBusquedaCompleta) ? $response1->datosSunat->distrito : '';
 		$_proveedor->personeria = $response1->datosSunat->personeria;
 		$_proveedor->process_ = $response1->datosSunat->process;
 
 		$_proveedor->codProv = $response2->proveedorT01?->codProv;
 		$_proveedor->idOrigenProv = $response2->proveedorT01?->idOrigenProv;
 		$_proveedor->numRuc = $response2->proveedorT01?->numRuc;
-		$_proveedor->nomRzsProv = $response2->proveedorT01?->nomRzsProv;
-		$_proveedor->esHabilitado = $response2->proveedorT01?->esHabilitado;
+		$_proveedor->nomRzsProv = $_proveedor->razon;
+		$_proveedor->esHabilitado = ($flagBusquedaCompleta) ? $response2->proveedorT01?->esHabilitado : '';
 		$_proveedor->lscIdTipReg = $response2->proveedorT01?->lscIdTipReg;
 		$_proveedor->lscIdTipRegVig = $response2->proveedorT01?->lscIdTipRegVig;
 		$_proveedor->esAptoContratar = $response2->proveedorT01?->esAptoContratar;
@@ -344,7 +397,6 @@ class ProcesamientoController extends Controller
 		$_proveedor->save();
 
 		//DB::select('CALL RESETEAR_DATOS_PROVEEDOR(?)', [$_proveedor->idProveedor]);
-
 		$lista_telefonos = $response2->proveedorT01->telefonos ?? [];
 		foreach ($lista_telefonos as $item) {
 			ProveedorTelefono::create([
@@ -363,78 +415,80 @@ class ProcesamientoController extends Controller
 		}
 		unset($lista_emails);
 
-		$antecedentes = $response1->antecedentes;
-		ProveedorAntecedente::create([
-			'idProveedor' => $_proveedor->idProveedor,
-			'sanciones' => json_encode($antecedentes->sanciones),
-			'inhsJudicial' => json_encode($antecedentes->inhsJudicial),
-			'inhsAdministrativa' => json_encode($antecedentes->inhsAdministrativa),
-			'fechaConsultaSancTCE' => Carbon::createFromFormat('d/m/Y H:i:s', $antecedentes->fechaConsultaSancTCE)->toString(),
-			'fechaConsultaInhabAD' => Carbon::createFromFormat('d/m/Y H:i:s', $antecedentes->fechaConsultaInhabAD)->toString(),
-			'fechaConsultaInhabMJ' => Carbon::createFromFormat('d/m/Y H:i:s', $antecedentes->fechaConsultaInhabMJ)->toString(),
-			'process_' => $antecedentes->process
-		]);
-		unset($antecedentes);
-
-		$lista_socios = $response1->conformacion->socios ?? [];
-		foreach ($lista_socios as $item) {
-			ProveedorSocio::create([
+		if ($flagBusquedaCompleta) {
+			$antecedentes = $response1->antecedentes;
+			ProveedorAntecedente::create([
 				'idProveedor' => $_proveedor->idProveedor,
-				'idSocio' => $item->idSocio,
-				'codigoRegistro' => $item->codigoRegistro,
-				'codigoDocIde' => $item->codigoDocIde,
-				'descDocIde' => $item->descDocIde,
-				'siglaDocIde' => $item->siglaDocIde,
-				'nroDocumento' => $item->nroDocumento,
-				'numeroAcciones_' => (string)$item->numeroAcciones,
-				'numeroAcciones' => $item->numeroAcciones,
-				'porcentajeAcciones_' => (string)$item->porcentajeAcciones,
-				'porcentajeAcciones' => $item->porcentajeAcciones,
-				'razonSocial' => $item->razonSocial,
-				'numeroRuc' => ($item->numeroRuc == 'null') ? null : $item->numeroRuc,
-				'fechaIngreso' => Funciones::convertirAFecha($item->fechaIngreso)
+				'sanciones' => json_encode($antecedentes->sanciones),
+				'inhsJudicial' => json_encode($antecedentes->inhsJudicial),
+				'inhsAdministrativa' => json_encode($antecedentes->inhsAdministrativa),
+				'fechaConsultaSancTCE' => Carbon::createFromFormat('d/m/Y H:i:s', $antecedentes->fechaConsultaSancTCE)->toString(),
+				'fechaConsultaInhabAD' => Carbon::createFromFormat('d/m/Y H:i:s', $antecedentes->fechaConsultaInhabAD)->toString(),
+				'fechaConsultaInhabMJ' => Carbon::createFromFormat('d/m/Y H:i:s', $antecedentes->fechaConsultaInhabMJ)->toString(),
+				'process_' => $antecedentes->process
 			]);
+			unset($antecedentes);
+	
+			$lista_socios = $response1->conformacion->socios ?? [];
+			foreach ($lista_socios as $item) {
+				ProveedorSocio::create([
+					'idProveedor' => $_proveedor->idProveedor,
+					'idSocio' => $item->idSocio,
+					'codigoRegistro' => $item->codigoRegistro,
+					'codigoDocIde' => $item->codigoDocIde,
+					'descDocIde' => $item->descDocIde,
+					'siglaDocIde' => $item->siglaDocIde,
+					'nroDocumento' => $item->nroDocumento,
+					'numeroAcciones_' => (string)$item->numeroAcciones,
+					'numeroAcciones' => $item->numeroAcciones,
+					'porcentajeAcciones_' => (string)$item->porcentajeAcciones,
+					'porcentajeAcciones' => $item->porcentajeAcciones,
+					'razonSocial' => $item->razonSocial,
+					'numeroRuc' => ($item->numeroRuc == 'null') ? null : $item->numeroRuc,
+					'fechaIngreso' => Funciones::convertirAFecha($item->fechaIngreso)
+				]);
+			}
+			unset($lista_socios);
+	
+			$lista_representantes = $response1->conformacion->representantes ?? [];
+			foreach ($lista_representantes as $item) {
+				ProveedorRepresentante::create([
+					'idProveedor' => $_proveedor->idProveedor,
+					'idRepresentante' => $item->idRepresentante,
+					'codigoRegistro' => $item->codigoRegistro,
+					'codigoDocIde' => $item->codigoDocIde,
+					'descDocIde' => $item->descDocIde,
+					'siglaDocIde' => $item->siglaDocIde,
+					'nroDocumento' => $item->nroDocumento,
+					'razonSocial' => $item->razonSocial,
+					'idCargo' => $item->idCargo,
+					'descCargo' => ($item->descCargo == 'null') ? null : $item->descCargo,
+					'numeroRuc' => ($item->numeroRuc == 'null') ? null : $item->numeroRuc,
+					'fechaIngreso' => Funciones::convertirAFecha($item->fechaIngreso)
+				]);
+			}
+			unset($lista_representantes);
+	
+			$lista_organosAdm = $response1->conformacion->organosAdm ?? [];
+			foreach ($lista_organosAdm as $item) {
+				ProveedorOrganoAdministrativo::create([
+					'idProveedor' => $_proveedor->idProveedor,
+					'idOrgano' => $item->idOrgano,
+					'codigoRegistro' => $item->codigoRegistro,
+					'codigoDocIde' => $item->codigoDocIde,
+					'descDocIde' => $item->descDocIde,
+					'siglaDocIde' => $item->siglaDocIde,
+					'nroDocumento' => $item->nroDocumento,
+					'apellidosNomb' => $item->apellidosNomb,
+					'idTipoOrgano' => $item->idTipoOrgano,
+					'descTipoOrgano' => $item->descTipoOrgano,
+					'idCargo' => $item->idCargo,
+					'descCargo' => $item->descCargo,
+					'fechaIngreso' => Funciones::convertirAFecha($item->fechaIngreso)
+				]);
+			}
+			unset($lista_organosAdm);
 		}
-		unset($lista_socios);
-
-		$lista_representantes = $response1->conformacion->representantes ?? [];
-		foreach ($lista_representantes as $item) {
-			ProveedorRepresentante::create([
-				'idProveedor' => $_proveedor->idProveedor,
-				'idRepresentante' => $item->idRepresentante,
-				'codigoRegistro' => $item->codigoRegistro,
-				'codigoDocIde' => $item->codigoDocIde,
-				'descDocIde' => $item->descDocIde,
-				'siglaDocIde' => $item->siglaDocIde,
-				'nroDocumento' => $item->nroDocumento,
-				'razonSocial' => $item->razonSocial,
-				'idCargo' => $item->idCargo,
-				'descCargo' => ($item->descCargo == 'null') ? null : $item->descCargo,
-				'numeroRuc' => ($item->numeroRuc == 'null') ? null : $item->numeroRuc,
-				'fechaIngreso' => Funciones::convertirAFecha($item->fechaIngreso)
-			]);
-		}
-		unset($lista_representantes);
-
-		$lista_organosAdm = $response1->conformacion->organosAdm ?? [];
-		foreach ($lista_organosAdm as $item) {
-			ProveedorOrganoAdministrativo::create([
-				'idProveedor' => $_proveedor->idProveedor,
-				'idOrgano' => $item->idOrgano,
-				'codigoRegistro' => $item->codigoRegistro,
-				'codigoDocIde' => $item->codigoDocIde,
-				'descDocIde' => $item->descDocIde,
-				'siglaDocIde' => $item->siglaDocIde,
-				'nroDocumento' => $item->nroDocumento,
-				'apellidosNomb' => $item->apellidosNomb,
-				'idTipoOrgano' => $item->idTipoOrgano,
-				'descTipoOrgano' => $item->descTipoOrgano,
-				'idCargo' => $item->idCargo,
-				'descCargo' => $item->descCargo,
-				'fechaIngreso' => Funciones::convertirAFecha($item->fechaIngreso)
-			]);
-		}
-		unset($lista_organosAdm);
 	}
 
 	public function exportarExcel(String $token)
@@ -445,9 +499,7 @@ class ProcesamientoController extends Controller
 			header('Access-Control-Expose-Headers: nombre-archivo');
 			header('nombre-archivo: reporte.xlsx');
 			error_log($this->obtenerMemoria());
-			$excel = new ReporteProveedores(
-				$_cargadoProveedores->idCargadoProveedores
-			);
+			$excel = new ReporteProveedores($_cargadoProveedores);
 			error_log($this->obtenerMemoria());
 			return ($excel)->download('Reporte.xlsx');
 		} catch (\Exception $e) {

@@ -26,6 +26,8 @@ $router->delete('/importar-excel', 'ProcesamientoController@importarExcel');
 $router->group(['middleware' => ['jwt.verify']], function () use ($router) {
 	$router->patch('/cambiar-contrasena', 'LoginController@cambiarContrasena');
 
+	$router->patch('/cargado-proveedores', 'ProcesamientoController@actualizarCargadoProveedores');
+
 	$router->get('/obtener-cargado/{token}', 'ProcesamientoController@obtenerCargado');
 	$router->post('/procesar-ruc', 'ProcesamientoController@procesarRuc');
 });
@@ -283,6 +285,13 @@ BEGIN
 END
 //
 DELIMITER ;
+
+
+-- CAMBIOS FEBRERO 2024
+
+ALTER TABLE usuario ADD COLUMN flagPuedeHacerBusquedaCompleta BOOL;
+ALTER TABLE cargado_proveedores ADD COLUMN flagBusquedaCompleta BOOL;
+
 
 
 */

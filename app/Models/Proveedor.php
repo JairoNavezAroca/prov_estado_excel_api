@@ -99,4 +99,8 @@ class Proveedor extends Model
     // Functions ...
 
     // Relations ...
+    public function cargadoProveedores()
+    {
+        return $this->belongsTo(CargadoProveedores::class, 'idCargadoProveedores', 'idCargadoProveedores');
+    }
 }

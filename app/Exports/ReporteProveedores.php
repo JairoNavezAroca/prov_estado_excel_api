@@ -11,10 +11,12 @@ class ReporteProveedores implements WithMultipleSheets
 	use Exportable;
 
 	private $idCargadoProveedores;
+	private $flagBusquedaCompleta;
 
-	public function __construct($idCargadoProveedores)
+	public function __construct($cargadoProveedores)
 	{
-		$this->idCargadoProveedores = $idCargadoProveedores;
+		$this->idCargadoProveedores = $cargadoProveedores->idCargadoProveedores;
+		$this->flagBusquedaCompleta = $cargadoProveedores->flagBusquedaCompleta;
 	}
 
 	public function sheets(): array
@@ -22,10 +24,12 @@ class ReporteProveedores implements WithMultipleSheets
 		$res = Reporte::obtenerDatosReporte($this->idCargadoProveedores);
 		$sheets = [];
 		array_push($sheets, new ProveedoresResumen($res->proveedor_resumen));
-		array_push($sheets, new ProveedoresMaestro($res->proveedor));
-		array_push($sheets, new ProveedoresDetalleSocios($res->proveedor_socio));
-		array_push($sheets, new ProveedoresDetalleRepresentantes($res->proveedor_representante));
-		array_push($sheets, new ProveedoresDetalleOrganosAdministrativos($res->proveedor_organo_administrativo));
+		if ($this->flagBusquedaCompleta){
+			array_push($sheets, new ProveedoresMaestro($res->proveedor));
+			array_push($sheets, new ProveedoresDetalleSocios($res->proveedor_socio));
+			array_push($sheets, new ProveedoresDetalleRepresentantes($res->proveedor_representante));
+			array_push($sheets, new ProveedoresDetalleOrganosAdministrativos($res->proveedor_organo_administrativo));
+		}
 		return $sheets;
 	}
 }
