@@ -43,7 +43,13 @@ class Usuario extends Model
      * @var array
      */
     protected $fillable = [
-        'nombres', 'apellidoPaterno', 'apellidoMaterno', 'flagObligarCambiarContrasena', 'idEstadoUsuario', 'flagBusquedaCompleta'
+        'nombres',
+        'apellidoPaterno',
+        'apellidoMaterno',
+        'flagObligarCambiarContrasena',
+        'idEstadoUsuario',
+        'flagBusquedaCompleta',
+        'flagPuedeHacerBusquedaManual',
     ];
 
     /**
@@ -70,6 +76,7 @@ class Usuario extends Model
         'flagObligarCambiarContrasena' => 'boolean',
         'idEstadoUsuario' => 'int',
         'flagPuedeHacerBusquedaCompleta' => 'boolean',
+        'flagPuedeHacerBusquedaManual' => 'boolean',
     ];
 
     /**

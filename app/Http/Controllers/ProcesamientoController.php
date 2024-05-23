@@ -64,52 +64,51 @@ class ProcesamientoController extends Controller
 		//return $nombreArchivoFinal;
 
 
-		//$ruta = ;
-		//dd($_FILES);
 		try {
+			$lista = [];
 			$lista_ruc = Excel::toArray(new \stdClass(), $rutaArchivoSubido); // https://www.php.net/manual/es/language.types.object.php
 			$lista_ruc = array_shift($lista_ruc); // Obtengo la primera hoja del excel
 			array_shift($lista_ruc); // Quito la primera fila de la hoja, la cual debe tener la cabecera 'RUC'
-			foreach ($lista_ruc as &$item) {
-				$item = (string)$item[0];
-				unset($item);
-			}
-
-			$token = Uuid::generate(4)->string;
-
-			$_cargadoProveedores = new CargadoProveedores();
-			$_cargadoProveedores->ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
-			$_cargadoProveedores->token = $token;
-			$_cargadoProveedores->fechaImportacion = Carbon::now()->toString();
-			$_cargadoProveedores->fechaExportacion = null;
-			$_cargadoProveedores->save();
-
-			foreach ($lista_ruc as $ruc) {
-				if ($ruc != '' && $ruc != null) {
-					$_proveedor = new Proveedor();
-					$_proveedor->idCargadoProveedores = $_cargadoProveedores->idCargadoProveedores;
-					$_proveedor->token = Uuid::generate(4)->string;
-					$_proveedor->fechaRegistroRuc = Carbon::now()->toString();
-					$_proveedor->ruc = $ruc;
-					$_proveedor->estadoRegistroDatos = Constantes::$PENDIENTE;
-					$_proveedor->numeroIntentos = 0;
-					$_proveedor->save();
-				}
+			foreach ($lista_ruc as $item) {
+				$cadenaRuc = (string)$item[0];
+				$lista[] = ['ruc' => $cadenaRuc];
 			}
 			unset($lista_ruc);
-
-			/*
-			$data = [
-				'token' => $token,
-				'lista_ruc' => Proveedor::where('idCargadoProveedores', $_cargadoProveedores->idCargadoProveedores)->select('token', 'ruc')->get()
-			];
-			*/
-			$data = $token;
+			$data = $this->registarCargadoProveedores($lista);
+			$data = $data['token'];
 		} catch (\Exception $e) {
 			$mensaje = 'Ha ocurrido un error, intentelo nuevamente';
 		}
 		error_log($this->obtenerMemoria());
 		return Respuesta::enviar($data ?? null, $mensaje ?? null);
+	}
+
+	public function registarCargadoProveedores($lista)
+	{
+		$token = Uuid::generate(4)->string;
+
+		$_cargadoProveedores = new CargadoProveedores();
+		$_cargadoProveedores->ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+		$_cargadoProveedores->token = $token;
+		$_cargadoProveedores->fechaImportacion = Carbon::now()->toString();
+		$_cargadoProveedores->fechaExportacion = null;
+		$_cargadoProveedores->save();
+
+		foreach ($lista as $data) {
+			$data = (array)$data;
+			if ($data['ruc'] != '' && $data['ruc'] != null) {
+				$_proveedor = new Proveedor();
+				$_proveedor->idCargadoProveedores = $_cargadoProveedores->idCargadoProveedores;
+				$_proveedor->token = Uuid::generate(4)->string;
+				$_proveedor->fechaRegistroRuc = Carbon::now()->toString();
+				$_proveedor->ruc = $data['ruc'];
+				$_proveedor->razon = $data['razon'] ?? null;
+				$_proveedor->estadoRegistroDatos = Constantes::$PENDIENTE;
+				$_proveedor->numeroIntentos = 0;
+				$_proveedor->save();
+			}
+		}
+		return ['token' => $token];
 	}
 
 	public function actualizarCargadoProveedores(Request $request)
